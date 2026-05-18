@@ -1,0 +1,10 @@
+[scd]
+threshold = 10  # 0 to 100
+downscale = 480 # width
+
+[sample]
+count_scene    = 3
+count_uniform  = 5
+duration       = 20 # sec
+min_separation = 30 # sec
+workers        = 4

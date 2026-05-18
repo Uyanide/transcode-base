@@ -1,0 +1,18 @@
+[smtp]
+host         = ""
+port         = 587
+user         = ""
+password     = ""
+to           = ""
+use_starttls = true
+
+[notification]
+app_name = "Transcode Base"
+icon     = "video-x-generic"
+urgency  = "normal"
+category = "transfer.complete"
+
+[notification.error]
+icon     = "dialog-error"
+urgency  = "critical"
+category = "transfer.error"

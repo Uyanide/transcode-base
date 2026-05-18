@@ -1,0 +1,47 @@
+filters = [
+    # "scale=1920:1080:flags=lanczos", # e.g.
+]
+
+[video.libvvenc]
+preset  = "fast"
+qpa     = "0"
+qp      = "24"
+pix_fmt = "yuv420p10le"
+
+[video.hevc_nvenc]
+preset     = "p7"
+tune       = "uhq"
+rc         = "vbr_hq"
+cq         = "24"
+pix_fmt    = "p010le"
+spatial-aq = "1"
+multipass  = "2"
+
+[video.av1_nvenc]
+preset    = "p7"
+tune      = "uhq"
+rc        = "vbr"
+cq        = "32"
+pix_fmt   = "p010le"
+multipass = "2"
+
+[video.libx265]
+preset      = "slow"
+crf         = "24"
+pix_fmt     = "yuv420p10le"
+x265-params = "aq-mode=3:aq-strength=0.8:psy-rd=1.0"
+
+[video.libsvtav1]
+preset        = "4"
+crf           = "35"
+pix_fmt       = "yuv420p10le"
+svtav1-params = "tune=0:enable-qm=1"
+
+[audio.copy]
+
+[audio.libopus]
+"b:a" = "128k"
+vbr   = "1"
+
+[audio.libfdk_aac]
+"b:a" = "128k"

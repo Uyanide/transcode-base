@@ -1,0 +1,29 @@
+filters = []
+
+[video.libaom-av1]
+"b:v"      = "3000k"
+cpu-used   = "4"
+row-mt     = "1"
+pix_fmt    = "yuv420p10le"
+aom-params = "tune=0"
+
+[video.libx265]
+"b:v"       = "3000k"
+preset      = "slow"
+pix_fmt     = "yuv420p10le"
+x265-params = "aq-mode=3:aq-strength=0.8:psy-rd=1.0"
+
+[video.libvvenc]
+"b:v"   = "3000k"
+preset  = "slow"
+qpa     = "0"
+pix_fmt = "yuv420p10le"
+
+[audio.copy]
+
+[audio.libopus]
+"b:a" = "128k"
+vbr   = "1"
+
+[audio.libfdk_aac]
+"b:a" = "128k"

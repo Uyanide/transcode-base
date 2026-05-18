@@ -1,0 +1,35 @@
+chunk-method = "ffms2"
+workers      = "1"
+pix-format   = "yuv420p10le"
+
+[audio.copy]
+audio-params = "-c:a copy"
+
+[audio.libopus]
+audio-params = "-c:a libopus -b:a {{ bitrate }} -vbr {{ vbr }}"
+args.bitrate = "128k"
+args.vbr     = "1"
+
+[audio.libfdk_aac]
+audio-params = "-c:a libfdk_aac -b:a {{ bitrate }}"
+args.bitrate = "128k"
+
+[tq]
+target-metric  = "ssimulacra2"
+target-quality = "75-85"
+probing-rate   = "4"
+extra-split    = "600"
+
+[tq.svt-av1]
+video-params     = "--preset {{ preset }} --input-depth {{ input-depth }} {{ extra-args }}"
+args.preset      = "4"
+args.extra-args  = "--tune 0 --enable-qm 1"
+args.input-depth = "10"
+probe.preset     = "8"
+
+[cq.svt-av1]
+video-params     = "--preset {{ preset }} --crf {{ crf }} --input-depth {{ input-depth }} {{ extra-args }}"
+args.extra-args  = "--tune 0 --enable-qm 1"
+args.input-depth = "10"
+args.preset      = "4"
+args.crf         = "35"
