@@ -14,14 +14,14 @@ from . import probe
 from .base import shell
 
 __all__ = [
+    "SCD",
     "SCDProfile",
     "SCDResult",
-    "SCDRunner",
     "Sample",
     "SampleProfile",
     "SampleResult",
-    "SampleRunner",
-    "SampleSource",
+    "SampleSlice",
+    "SampleSourceType",
     "SceneChange",
 ]
 
@@ -39,7 +39,7 @@ class SCDResult:
 
 
 @define
-class SCDRunner:
+class SCD:
     input: Path
     profile: SCDProfile
 
@@ -90,16 +90,16 @@ def _parse_scenes(text: str) -> list[SceneChange]:
     return out
 
 
-class SampleSource(StrEnum):
+class SampleSourceType(StrEnum):
     SCENE = "scene"
     UNIFORM = "uniform"
 
 
 @frozen
-class Sample:
+class SampleSlice:
     index: int
     time: float
-    source: SampleSource
+    source: SampleSourceType
     path: Path
 
 
@@ -107,11 +107,11 @@ class Sample:
 class SampleResult:
     input: Path
     output_dir: Path
-    samples: list[Sample]
+    samples: list[SampleSlice]
 
 
 @define
-class SampleRunner:
+class Sample:
     input: Path
     output_dir: Path
     profile: SampleProfile
@@ -119,7 +119,7 @@ class SampleRunner:
     scenes: list[SceneChange] = field(factory=list)
 
     def run(self) -> SampleResult:
-        duration = probe.Runner(input=self.input, options={probe.Option.DURATION}).run().duration
+        duration = probe.Probe(input=self.input, options={probe.Option.DURATION}).run().duration
 
         scene_pairs = [(s.time, s.score) for s in self.scenes]
         scene_times = _pick_scene_times(
@@ -138,13 +138,13 @@ class SampleRunner:
         )
 
         plan = sorted(
-            [(t, SampleSource.SCENE) for t in scene_times]
-            + [(t, SampleSource.UNIFORM) for t in uniform_times],
+            [(t, SampleSourceType.SCENE) for t in scene_times]
+            + [(t, SampleSourceType.UNIFORM) for t in uniform_times],
             key=lambda x: x[0],
         )
         self.output_dir.mkdir(parents=True, exist_ok=True)
         samples = [
-            Sample(i, t, src, self.output_dir / f"sample_{i:02d}.mkv")
+            SampleSlice(i, t, src, self.output_dir / f"sample_{i:02d}.mkv")
             for i, (t, src) in enumerate(plan)
         ]
         with ThreadPoolExecutor(max_workers=self.profile.workers) as ex:

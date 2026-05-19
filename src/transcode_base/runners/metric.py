@@ -14,16 +14,16 @@ from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
+    "PSNR",
+    "SSIM",
+    "SSIMULACRA2",
+    "VMAF",
+    "Butteraugli",
     "ButteraugliResult",
-    "ButteraugliRunner",
     "PSNRResult",
-    "PSNRRunner",
     "SSIMResult",
-    "SSIMRunner",
     "SSIMULACRA2Result",
-    "SSIMULACRA2Runner",
     "VMAFResult",
-    "VMAFRunner",
 ]
 
 
@@ -129,21 +129,21 @@ class _FFmpegBaseRunner:
 
 
 @define
-class SSIMRunner(_FFmpegBaseRunner):
+class SSIM(_FFmpegBaseRunner):
     metric_name = "SSIM"
     metric_arg = "ssim"
     pattern = re.compile(r"\bAll:(\d+\.\d+)")
 
 
 @define
-class PSNRRunner(_FFmpegBaseRunner):
+class PSNR(_FFmpegBaseRunner):
     metric_name = "PSNR"
     metric_arg = "psnr"
     pattern = re.compile(r"\bAll:(\d+\.\d+)")
 
 
 @define
-class VMAFRunner:
+class VMAF:
     reference: Path
     distorted: Path
 
@@ -244,13 +244,13 @@ class _FFVshipRunner:
 
 
 @define
-class SSIMULACRA2Runner(_FFVshipRunner):
+class SSIMULACRA2(_FFVshipRunner):
     metric_arg = "ssimulacra2"
     metric_name = "SSIMULACRA2"
 
 
 @define
-class ButteraugliRunner(_FFVshipRunner):
+class Butteraugli(_FFVshipRunner):
     metric_arg = "butteraugli"
     metric_name = "Butteraugli"
 

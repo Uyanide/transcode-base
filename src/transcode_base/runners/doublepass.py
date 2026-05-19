@@ -8,9 +8,9 @@ from ..profiles.doublepass import EncoderProfile, Profile
 from .base import shell
 
 __all__ = [
+    "FFmpeg",
     "Profile",
     "Result",
-    "Runner",
 ]
 
 
@@ -23,7 +23,7 @@ class Result:
 
 
 @define
-class Runner:
+class FFmpeg:
     input: Path
     output: Path
     profile: Profile

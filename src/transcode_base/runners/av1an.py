@@ -16,10 +16,10 @@ from ..utils import promote, render
 from .base import ShellRunResult, shell
 
 __all__ = [
+    "Av1an",
     "Mode",
     "Profile",
     "Result",
-    "Runner",
 ]
 
 
@@ -35,7 +35,7 @@ class Result(ShellRunResult):
 
 
 @define
-class Runner:
+class Av1an:
     input: Path
     output: Path
     profile: Profile

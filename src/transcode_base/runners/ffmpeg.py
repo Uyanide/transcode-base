@@ -11,9 +11,9 @@ from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
+    "FFmpeg",
     "Profile",
     "Result",
-    "Runner",
 ]
 
 
@@ -25,7 +25,7 @@ class Result(ShellRunResult):
 
 
 @define
-class Runner:
+class FFmpeg:
     input: Path
     output: Path
     profile: Profile

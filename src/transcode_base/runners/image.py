@@ -12,9 +12,9 @@ from ..utils import promote, render
 from .base import ShellRunResult, shell
 
 __all__ = [
+    "Image",
     "Profile",
     "Result",
-    "Runner",
 ]
 
 
@@ -25,7 +25,7 @@ class Result(ShellRunResult):
 
 
 @define
-class Runner:
+class Image:
     input: Path
     output: Path
     profile: Profile

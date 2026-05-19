@@ -13,8 +13,8 @@ from .base import ShellRunResult, shell
 
 __all__ = [
     "Option",
+    "Probe",
     "Result",
-    "Runner",
 ]
 
 
@@ -35,7 +35,7 @@ class Result(ShellRunResult):
 
 
 @define
-class Runner:
+class Probe:
     input: Path
     options: set[Option]
 
