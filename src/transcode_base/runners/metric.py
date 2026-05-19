@@ -20,6 +20,7 @@ __all__ = [
     "VMAF",
     "Butteraugli",
     "ButteraugliResult",
+    "FFVshipChannel",
     "PSNRResult",
     "SSIMResult",
     "SSIMULACRA2Result",
