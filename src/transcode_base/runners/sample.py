@@ -10,8 +10,8 @@ from pathlib import Path
 from attr import define, field, frozen
 
 from ..profiles.sample import SampleProfile, SCDProfile
+from . import probe
 from .base import shell
-from .probe import Option, Runner
 
 __all__ = [
     "SCDProfile",
@@ -115,15 +115,19 @@ class SampleRunner:
     input: Path
     output_dir: Path
     profile: SampleProfile
-    pix_fmt: str
+    pix_fmt: str | None = None
     scenes: list[SceneChange] = field(factory=list)
 
     def run(self) -> SampleResult:
-        duration = Runner(input=self.input, options={Option.DURATION}).run().duration
+        duration = probe.Runner(input=self.input, options={probe.Option.DURATION}).run().duration
 
         scene_pairs = [(s.time, s.score) for s in self.scenes]
         scene_times = _pick_scene_times(
-            scene_pairs, count=self.profile.count_scene, min_sep=self.profile.min_separation
+            scene_pairs,
+            count=self.profile.count_scene,
+            min_sep=self.profile.min_separation,
+            duration=duration,
+            sample_dur=self.profile.duration,
         )
         uniform_times = _pick_uniform_times(
             duration,
@@ -173,10 +177,12 @@ class SampleRunner:
             "1",
             "-g",
             "1",
-            "-pix_fmt",
-            self.pix_fmt,
-            str(output_path),
         ]
+        if self.pix_fmt:
+            cmd.extend(["-pix_fmt", self.pix_fmt])
+        if self.profile.workers > 1:
+            cmd.extend(["-threads", "2"])
+        cmd.append(str(output_path))
         result = shell(cmd, check=False, capture=True)
         if result.returncode != 0:
             stderr = (result.stderr or b"").decode()
@@ -189,11 +195,14 @@ def _pick_scene_times(
     *,
     count: int,
     min_sep: float,
+    duration: float,
+    sample_dur: float,
 ) -> list[float]:
     """Top-by-score, greedy with min-separation. May return fewer than `count`
     if candidates are sparse or too clustered."""
     if count <= 0 or not scenes:
         return []
+    scenes = [(t, s) for t, s in scenes if 0 <= t <= duration - sample_dur]
     ranked = sorted(scenes, key=lambda x: -x[1])
     kept: list[float] = []
     for t, _ in ranked:

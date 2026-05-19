@@ -12,12 +12,12 @@ from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
+    "Mail",
     "MailProfile",
     "MailResult",
-    "MailRunner",
+    "Notify",
     "NotifyProfile",
     "NotifyResult",
-    "NotifyRunner",
 ]
 
 
@@ -27,7 +27,7 @@ class MailResult:
 
 
 @define
-class MailRunner:
+class Mail:
     profile: MailProfile
     subject: str
     body: str
@@ -55,7 +55,7 @@ class NotifyResult(ShellRunResult):
 
 
 @define
-class NotifyRunner:
+class Notify:
     profile: NotifyProfile
     summary: str
     body: str

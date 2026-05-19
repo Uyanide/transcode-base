@@ -22,6 +22,7 @@ class Option(StrEnum):
     FPS = "fps"
     FRAMES = "frames"
     DURATION = "duration"
+    PIX_FMT = "pix_fmt"
 
 
 @frozen
@@ -30,6 +31,7 @@ class Result(ShellRunResult):
     fps: str | None = None
     frames: int | None = None
     duration: float = 0.0
+    pix_fmt: str | None = None
 
 
 @define
@@ -45,6 +47,8 @@ class Runner:
             stream_entries.append("nb_frames")
         if Option.DURATION in self.options:
             stream_entries.append("duration")
+        if Option.PIX_FMT in self.options:
+            stream_entries.append("pix_fmt")
         stream_entries_str = ",".join(stream_entries)
         return [
             "ffprobe",

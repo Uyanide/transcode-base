@@ -5,6 +5,6 @@ downscale = 480 # width
 [sample]
 count_scene    = 3
 count_uniform  = 5
-duration       = 20 # sec
+duration       = 10 # sec
 min_separation = 30 # sec
 workers        = 4
