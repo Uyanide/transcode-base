@@ -1,6 +1,6 @@
 [project]
 name            = "transcode-base"
-version         = "0.1.1"
+version         = "0.1.2"
 description     = "Profiles-based wrappers for video / audio / image encoding and quality measurement."
 readme          = "README.md"
 requires-python = ">=3.13"

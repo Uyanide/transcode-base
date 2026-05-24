@@ -5,7 +5,7 @@ Mirrors `image.toml`:
     [<format>.<backend>]
         requires = "<executable>"
         command  = ["argv0", "...{{ var }}..."]
-        args     = { speed = "...", quality = "..." }
+        args     = { speed = "...", quality = "...", ... }
 
 The `command` list is the full argv template; `args` plus the implicit
 `{input_path, output_path}` form the render context.

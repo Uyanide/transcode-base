@@ -9,33 +9,24 @@ command = [
     "{{ input_path }}",
     "{{ output_path }}",
 ]
-args = { speed = "3", quality = "80" }
+args = { speed = "1", quality = "80" }
 
 [avif.magick]
 requires = "magick"
 command = [
     "magick",
     "{{ input_path }}",
+    "-depth",
+    "10",
+    "-define",
+    "heic:chroma=444",
     "-define",
     "heic:speed={{ speed }}", # 0 (slowest) to 10 (fastest)
     "-quality",
     "{{ quality }}",          # 0 to 100
     "{{ output_path }}",
 ]
-args = { speed = "2", quality = "80" }
-
-[webp.magick]
-requires = "magick"
-command = [
-    "magick",
-    "{{ input_path }}",
-    "-define",
-    "webp:method={{ speed }}", # 0 (fastest) to 6 (slowest)
-    "-quality",
-    "{{ quality }}",           # 0 to 100
-    "{{ output_path }}",
-]
-args = { speed = "6", quality = "80" }
+args = { speed = "1", quality = "70" }
 
 [avif.ffmpeg]
 requires = "ffmpeg"
@@ -54,14 +45,16 @@ command = [
     "-crf",
     "{{ quality }}",     # 0 (best) to 63 (worst)
     "-pix_fmt",
-    "yuv420p10le",
+    "yuv444p10le",
+    "-color_range",
+    "pc",
     "-still-picture",
     "1",
-    "-aomav1-params",
+    "-aom-params",
     "tune=iq",
     "{{ output_path }}",
 ]
-args = { speed = "1", quality = "20" }
+args = { speed = "1", quality = "24" }
 
 [avif.avifenc]
 requires = "avifenc"
@@ -70,7 +63,7 @@ command = [
     "--codec",
     "aom",
     "--speed",
-    "{{ speed }}",   # 0 (slowest) to 10 (fastest)
+    "{{ speed }}",       # 0 (slowest) to 10 (fastest)
     "--jobs",
     "all",
     "--depth",
@@ -78,12 +71,23 @@ command = [
     "--yuv",
     "444",
     "--qcolor",
-    "{{ quality }}", # 0 to 100
+    "{{ quality }}",     # 0 to 100
     "--advanced",
     "tune=iq",
-    # "--advanced",
-    # "color:enable-chroma-deltaq=1",
-    # "--advanced",
-    # "color:deltaq-mode=6",
+    "{{ input_path }}",
+    "{{ output_path }}",
 ]
-args = { speed = "1", quality = "75" }
+args = { speed = "1", quality = "68" }
+
+[webp.magick]
+requires = "magick"
+command = [
+    "magick",
+    "{{ input_path }}",
+    "-define",
+    "webp:method={{ speed }}", # 0 (fastest) to 6 (slowest)
+    "-quality",
+    "{{ quality }}",           # 0 to 100
+    "{{ output_path }}",
+]
+args = { speed = "6", quality = "84" }
