@@ -195,14 +195,17 @@ def _pick_scene_times(
     *,
     count: int,
     min_sep: float,
-    duration: float,
+    duration: float | None,
     sample_dur: float,
 ) -> list[float]:
     """Top-by-score, greedy with min-separation. May return fewer than `count`
     if candidates are sparse or too clustered."""
     if count <= 0 or not scenes:
         return []
-    scenes = [(t, s) for t, s in scenes if 0 <= t <= duration - sample_dur]
+    if duration is not None:
+        scenes = [(t, s) for t, s in scenes if 0 <= t <= duration - sample_dur]
+    else:
+        scenes = [(t, s) for t, s in scenes if t >= 0]
     ranked = sorted(scenes, key=lambda x: -x[1])
     kept: list[float] = []
     for t, _ in ranked:
@@ -214,7 +217,7 @@ def _pick_scene_times(
 
 
 def _pick_uniform_times(
-    duration: float,
+    duration: float | None,
     *,
     count: int,
     sample_dur: float,
@@ -224,7 +227,7 @@ def _pick_uniform_times(
     """Evenly-spaced timestamps inside [0, duration - sample_dur], filtered to
     keep at least `min_sep` from any timestamp in `avoid`. May return fewer
     than `count`."""
-    if count <= 0 or duration <= sample_dur:
+    if count <= 0 or duration is None or duration <= sample_dur:
         return []
     available = duration - sample_dur
     candidates = [available * (i + 0.5) / count for i in range(count)]

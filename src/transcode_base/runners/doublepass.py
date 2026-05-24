@@ -5,7 +5,7 @@ from pathlib import Path
 from attr import define, frozen
 
 from ..profiles.doublepass import EncoderProfile, Profile
-from .base import shell
+from .base import ShellRunResult, shell
 
 __all__ = [
     "FFmpeg",
@@ -18,8 +18,8 @@ __all__ = [
 class Result:
     input: Path
     output: Path
-    cmd_pass1: list[str]
-    cmd_pass2: list[str]
+    pass1: ShellRunResult
+    pass2: ShellRunResult
 
 
 @define
@@ -64,12 +64,12 @@ class FFmpeg:
         cmd_pass1 = self.build_cmd_pass1()
         cmd_pass2 = self.build_cmd_pass2()
 
-        shell(cmd_pass1)
-        shell(cmd_pass2)
+        pass1 = shell(cmd_pass1)
+        pass2 = shell(cmd_pass2)
 
         return Result(
-            cmd_pass1=cmd_pass1,
-            cmd_pass2=cmd_pass2,
+            pass1=pass1,
+            pass2=pass2,
             input=self.input,
             output=self.output,
         )
