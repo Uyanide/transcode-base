@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
-from tempfile import TemporaryFile
+from tempfile import NamedTemporaryFile
 
 from ..runners.metric import (
     PSNR,
@@ -46,16 +46,24 @@ def main() -> None:
         print(f"SSIM  {result.mean:.6f}")
     elif kind == "psnr":
         result = PSNR(reference=ns.reference, distorted=ns.distorted).run()
-        print(f"PSNR  {result.mean:.6f}")
+        print(
+            f"PSNR"
+            f"  y={result.y:.2f}"
+            f"  u={result.u:.2f}"
+            f"  v={result.v:.2f}"
+            f"  average={result.average:.2f}"
+            f"  min={result.min:.2f}"
+            f"  max={result.max:.2f}"
+        )
     else:
-        with TemporaryFile(suffix=".json") as tmp:
+        with NamedTemporaryFile(suffix=".json") as tmp:
             if kind == "vmaf":
                 result = VMAF(
                     reference=ns.reference,
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 4,
                     subsample=every if every is not None else 1,
-                    log_path=tmp.name,
+                    log_path=Path(tmp.name),
                 ).run()
                 print(
                     f"VMAF"
@@ -70,7 +78,7 @@ def main() -> None:
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 2,
                     every=every if every is not None else 1,
-                    log_path=tmp.name,
+                    log_path=Path(tmp.name),
                 ).run()
                 _print_ffvship(result.channels)
             elif kind == "butteraugli":
@@ -79,6 +87,6 @@ def main() -> None:
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 2,
                     every=every if every is not None else 1,
-                    log_path=tmp.name,
+                    log_path=Path(tmp.name),
                 ).run()
                 _print_ffvship(result.channels)

@@ -6,7 +6,7 @@ import json
 import re
 import statistics
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, cast
 
 from attr import define, frozen
 
@@ -44,18 +44,18 @@ class VMAFResult(_MetricResult):
 
 
 @frozen
-class _FFmpegBaseMetricResult(_MetricResult):
+class SSIMResult(_MetricResult):
     mean: float
 
 
 @frozen
-class SSIMResult(_FFmpegBaseMetricResult):
-    pass
-
-
-@frozen
-class PSNRResult(_FFmpegBaseMetricResult):
-    pass
+class PSNRResult(_MetricResult):
+    y: float
+    u: float
+    v: float
+    average: float
+    min: float
+    max: float
 
 
 @frozen
@@ -87,15 +87,17 @@ class ButteraugliResult(SSIMULACRA2Result):
 
 
 @define
-class _FFmpegBaseRunner:
+class _FFmpegBaseRunner[Result: _MetricResult]:
     metric_name: ClassVar[str]
     metric_arg: ClassVar[str]
-    pattern: ClassVar[re.Pattern]
+    result_cls: ClassVar[type[_MetricResult]]
 
     reference: Path
     distorted: Path
     reference_filters: list[str] | None = None
     distorted_filters: list[str] | None = None
+
+    def parse(self, text: str) -> dict[str, float]: ...
 
     def build_cmd(self) -> list[str]:
         return _build_ffmpeg_filter_cmd(
@@ -106,41 +108,54 @@ class _FFmpegBaseRunner:
             metric_filter=self.metric_arg,
         )
 
-    def parse(self, text: str) -> float:
-        m = re.search(self.pattern, text)
-        if not m:
-            msg = f"Failed to parse {self.metric_name} result from: {text}"
-            raise RuntimeError(msg)
-        return float(m.group(1))
-
-    def run(self) -> _FFmpegBaseMetricResult:
+    def run(self) -> Result:
         shell_result = shell(self.build_cmd(), capture=True)
         if shell_result.stderr is None:
             msg = (
                 f"{self.metric_name} metric did not produce any stderr output for {self.distorted}"
             )
             raise RuntimeError(msg)
-        return promote(
-            shell_result,
-            _FFmpegBaseMetricResult,
-            reference=self.reference,
-            distorted=self.distorted,
-            mean=self.parse(shell_result.stderr.decode()),
+        return cast(
+            Result,
+            promote(
+                shell_result,
+                self.result_cls,
+                reference=self.reference,
+                distorted=self.distorted,
+                **self.parse(shell_result.stderr.decode()),
+            ),
         )
 
 
 @define
-class SSIM(_FFmpegBaseRunner):
+class SSIM(_FFmpegBaseRunner[SSIMResult]):
     metric_name = "SSIM"
     metric_arg = "ssim"
-    pattern = re.compile(r"\bAll:(\d+\.\d+)")
+    result_cls = SSIMResult
+
+    def parse(self, text: str) -> dict[str, float]:
+        m = re.search(r"\bAll:(\d+\.\d+)", text)
+        if not m:
+            msg = f"Failed to parse {self.metric_name} result from: {text}"
+            raise RuntimeError(msg)
+        return {"mean": float(m.group(1))}
 
 
 @define
-class PSNR(_FFmpegBaseRunner):
+class PSNR(_FFmpegBaseRunner[PSNRResult]):
     metric_name = "PSNR"
     metric_arg = "psnr"
-    pattern = re.compile(r"\baverage:(\d+\.\d+)")
+    result_cls = PSNRResult
+
+    def parse(self, text: str) -> dict[str, float]:
+        ret = {}
+        for key in ["y", "u", "v", "average", "min", "max"]:
+            m = re.search(rf"\b{key}:(\d+\.\d+)", text)
+            if not m:
+                msg = f"Failed to parse PSNR {key} from: {text}"
+                raise RuntimeError(msg)
+            ret[key] = float(m.group(1))
+        return ret
 
 
 @define
