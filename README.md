@@ -1,17 +1,6 @@
 # transcode-base
 
-Personal toolkit for video / audio / image encoding and quality measurement. Typed Python wrappers around ffmpeg, av1an, ffprobe, and FFVship, plus CLI scripts for common tasks.
-
-## What it is
-
-A library (`transcode_base`) that models encoding jobs as frozen dataclasses: a **profile** (loaded from TOML, deep-merged with any overrides) drives a **runner** (builds and executes the CLI command, returns a typed result). No subprocess strings, no hidden global state.
-
-Profiles live in `src/transcode_base/defaults/` and can be layered — pass extra TOML files or dicts to `load_profile()` and only the keys you specify change.
-
-## Dependencies
-
-- Python 3.13+, `attrs`
-- External binaries (only what you actually use): `ffmpeg`, `ffprobe`, `av1an`, `FFVship`, `notify-send`, `oavif`, `avifenc`, `magick`, ...
+Profiles-based wrappers for video / audio / image encoding and quality measurement.
 
 ## Library usage
 
@@ -43,14 +32,11 @@ result = tb.av1an.Av1an(
 
 ## CLI
 
-All scripts accept `--help`.
-
-### Encode with av1an
+### av1an
 
 ```sh
 tb-av input.mkv
-tb-av input.mkv -o out.mkv --video svt-av1 --audio libopus --mode cq
-tb-av input.mkv --arg preset=6 --probe preset=10
+tb-av input.mkv -o out.mkv --video svt-av1 --audio libfdk_aac --mode tq
 ```
 
 `--arg KEY=VALUE` overrides individual keys in the encoder's `args` render context; `--probe KEY=VALUE` overrides the probe context.
@@ -60,7 +46,6 @@ tb-av input.mkv --arg preset=6 --probe preset=10
 ```sh
 tb-ff input.mkv
 tb-ff input.mkv --video libx265 --audio libopus --arg crf=20
-tb-ff input.mkv --no-audio
 ```
 
 ### Encode an image

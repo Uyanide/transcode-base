@@ -140,7 +140,7 @@ class SSIM(_FFmpegBaseRunner):
 class PSNR(_FFmpegBaseRunner):
     metric_name = "PSNR"
     metric_arg = "psnr"
-    pattern = re.compile(r"\bAll:(\d+\.\d+)")
+    pattern = re.compile(r"\baverage:(\d+\.\d+)")
 
 
 @define

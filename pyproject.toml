@@ -1,7 +1,7 @@
 [project]
 name            = "transcode-base"
-version         = "0.1.0"
-description     = "Task-style Python API and CLI scripts wrapping encoders and quality metrics."
+version         = "0.1.1"
+description     = "Profiles-based wrappers for video / audio / image encoding and quality measurement."
 readme          = "README.md"
 requires-python = ">=3.13"
 dependencies    = ["attrs>=26.1.0"]
@@ -11,8 +11,8 @@ tb-av     = "transcode_base.cli.av1an:main"
 tb-ff     = "transcode_base.cli.ffmpeg:main"
 tb-img    = "transcode_base.cli.image:main"
 tb-imgs   = "transcode_base.cli.images:main"
-tb-sample  = "transcode_base.cli.sample:main"
-tb-metric  = "transcode_base.cli.metric:main"
+tb-sample = "transcode_base.cli.sample:main"
+tb-metric = "transcode_base.cli.metric:main"
 
 [dependency-groups]
 dev = ["pyright>=1.1.409", "ruff>=0.15.13"]
