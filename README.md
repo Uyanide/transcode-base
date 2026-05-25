@@ -1,5 +1,9 @@
 # transcode-base
 
+> What were the parameters I used to encode that similar video a week ago🤔
+>
+> Oh, shell history, I see. But, what makes it better is a ...
+
 Profile-based wrappers for video / audio / image encoding and quality measurement.
 
 ## Library usage
