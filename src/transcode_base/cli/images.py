@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
@@ -30,6 +31,7 @@ def main() -> None:
     p.add_argument("--glob", default="*", metavar="PATTERN")
     p.add_argument("--workers", type=int, default=4)
     p.add_argument("--arg", metavar="KEY=VALUE", action="append", default=[], type=kv_type)
+    p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
 
     ext = ns.ext or f".{ns.format}"
@@ -62,13 +64,17 @@ def main() -> None:
     def _run(pair: tuple[Path, Path]) -> None:
         src, dst = pair
         try:
-            Image(
+            runner = Image(
                 input=src,
                 output=dst,
                 profile=profile,
                 format=ns.format,
                 backend=ns.backend,
-            ).run()
+            )
+            if ns.dry_run:
+                print(shlex.join(runner.build_cmd()))
+            else:
+                runner.run()
         except Exception as e:
             errors.append((src, e))
 
