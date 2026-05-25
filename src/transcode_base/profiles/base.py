@@ -19,13 +19,17 @@ class FromRaw[P](Protocol):
 
 def load_profile[P: FromRaw](
     parser: type[P],
-    *overrides: Path | RawProfile,
+    *overrides: Path | RawProfile | str,
 ) -> P:
     """Load the bundled default for `name`, deep-merge each override in order
     (Path -> parsed TOML; dict -> used as-is), then parse to a typed profile."""
     merged = _read_default(parser.default_name())
     for ov in overrides:
-        layer = _read_toml(ov) if isinstance(ov, Path) else ov
+        layer = (
+            _read_toml(ov)
+            if isinstance(ov, Path)
+            else (tomllib.loads(ov) if isinstance(ov, str) else ov)
+        )
         merged = deep_merge(merged, layer)
     return parser.from_raw(merged)
 
