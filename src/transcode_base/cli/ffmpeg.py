@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 from pathlib import Path
 from typing import cast
 
@@ -27,6 +28,7 @@ def main() -> None:
         type=kv_type,
         dest="audio_arg",
     )
+    p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
 
     video: str | None = None if ns.no_video else ns.video
@@ -42,10 +44,14 @@ def main() -> None:
         raw["audio"] = {audio: dict(ns.audio_arg)}
 
     profile = load_profile(_prof.Profile, cast(RawProfile, raw))
-    FFmpeg(
+    runner = FFmpeg(
         input=ns.input,
         output=output,
         profile=profile,
         video=video,
         audio=audio,
-    ).run()
+    )
+    if ns.dry_run:
+        print(shlex.join(runner.build_cmd()))
+    else:
+        runner.run()

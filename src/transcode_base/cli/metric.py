@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -35,6 +36,7 @@ def main() -> None:
     p.add_argument("type", choices=_CHOICES)
     p.add_argument("--threads", type=int)
     p.add_argument("--every", type=int)
+    p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
 
     kind: str = ns.type
@@ -58,13 +60,17 @@ def main() -> None:
     else:
         with NamedTemporaryFile(suffix=".json") as tmp:
             if kind == "vmaf":
-                result = VMAF(
+                runner = VMAF(
                     reference=ns.reference,
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 4,
                     subsample=every if every is not None else 1,
                     log_path=Path(tmp.name),
-                ).run()
+                )
+                if ns.dry_run:
+                    print(shlex.join(runner.build_cmd()))
+                    return
+                result = runner.run()
                 print(
                     f"VMAF"
                     f"  mean={result.mean:.4f}"
@@ -73,20 +79,28 @@ def main() -> None:
                     f"  max={result.max:.4f}"
                 )
             elif kind == "ssimulacra2":
-                result = SSIMULACRA2(
+                runner = SSIMULACRA2(
                     reference=ns.reference,
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 2,
                     every=every if every is not None else 1,
                     log_path=Path(tmp.name),
-                ).run()
+                )
+                if ns.dry_run:
+                    print(shlex.join(runner.build_cmd()))
+                    return
+                result = runner.run()
                 _print_ffvship(result.channels)
             elif kind == "butteraugli":
-                result = Butteraugli(
+                runner = Butteraugli(
                     reference=ns.reference,
                     distorted=ns.distorted,
                     threads=threads if threads is not None else 2,
                     every=every if every is not None else 1,
                     log_path=Path(tmp.name),
-                ).run()
+                )
+                if ns.dry_run:
+                    print(shlex.join(runner.build_cmd()))
+                    return
+                result = runner.run()
                 _print_ffvship(result.channels)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import shlex
 from pathlib import Path
 from typing import cast
 
@@ -19,11 +20,10 @@ def main() -> None:
     p.add_argument("--mode", default="tq", choices=["tq", "cq"])
     p.add_argument("--arg", metavar="KEY=VALUE", action="append", default=[], type=kv_type)
     p.add_argument("--probe", metavar="KEY=VALUE", action="append", default=[], type=kv_type)
+    p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
 
-    output = ns.output or ns.input.with_name(
-        f"{ns.input.stem}.av1an.{ns.video}.{ns.audio}.mkv"
-    )
+    output = ns.output or ns.input.with_name(f"{ns.input.stem}.av1an.{ns.video}.{ns.audio}.mkv")
 
     enc: dict[str, dict[str, str]] = {}
     if ns.arg:
@@ -33,11 +33,15 @@ def main() -> None:
 
     override = cast(RawProfile, {ns.mode: {ns.video: enc}} if enc else {})
     profile = load_profile(_prof.Profile, override)
-    Av1an(
+    runner = Av1an(
         input=ns.input,
         output=output,
         profile=profile,
         mode=Mode(ns.mode),
         encoder=ns.video,
         audio=ns.audio,
-    ).run()
+    )
+    if ns.dry_run:
+        print(shlex.join(runner.build_cmd()))
+    else:
+        runner.run()
