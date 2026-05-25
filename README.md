@@ -30,6 +30,30 @@ result = tb.av1an.Av1an(
 ).run()
 ```
 
+### Shell backends
+
+By default runners execute commands directly. Use `use_backend` to inject
+alternative behaviour for the duration of a `with` block:
+
+```python
+from transcode_base import use_backend, current_backend, QuietBackend, TimedBackend, LoggingBackend
+
+# suppress terminal output
+with use_backend(QuietBackend()):
+    runner.run()
+
+# measure time per command
+timed = TimedBackend()
+with use_backend(timed):
+    runner.run()
+for t in timed.timings:
+    print(f"{t.elapsed:.3f}s  {t.cmd[0]}")
+
+# log commands (stack on top of the current backend)
+with use_backend(LoggingBackend(inner=current_backend())):
+    runner.run()
+```
+
 ## CLI
 
 ### av1an
