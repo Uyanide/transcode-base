@@ -7,7 +7,6 @@ from pathlib import Path
 from attr import define, frozen
 
 from ..profiles.ffmpeg import EncoderProfile, Profile
-from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
@@ -18,10 +17,11 @@ __all__ = [
 
 
 @frozen
-class Result(ShellRunResult):
+class Result:
     input: Path
     output: Path
     filters: list[str]
+    shell: ShellRunResult
 
 
 @define
@@ -55,13 +55,7 @@ class FFmpeg:
 
     def run(self) -> Result:
         result = shell(self.build_cmd())
-        return promote(
-            result,
-            Result,
-            input=self.input,
-            output=self.output,
-            filters=self.profile.filters,
-        )
+        return Result(input=self.input, output=self.output, filters=self.profile.filters, shell=result)
 
 
 def _lookup(table: dict[str, EncoderProfile], name: str, kind: str) -> EncoderProfile:

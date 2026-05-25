@@ -16,11 +16,22 @@ class ShellRunResult:
     cmd: list[str]
 
 
-def shell(cmd: list[str], *, check: bool = True, capture: bool = False) -> ShellRunResult:
-    proc = subprocess.run(cmd, capture_output=capture, check=check)
+def shell(
+    cmd: list[str],
+    *,
+    check: bool = True,
+    stdout: bool = False,
+    stderr: bool = False,
+) -> ShellRunResult:
+    proc = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE if stdout else None,
+        stderr=subprocess.PIPE if stderr else None,
+        check=check,
+    )
     return ShellRunResult(
         returncode=proc.returncode,
-        stdout=proc.stdout if capture else None,
-        stderr=proc.stderr if capture else None,
+        stdout=proc.stdout,
+        stderr=proc.stderr,
         cmd=cmd,
     )

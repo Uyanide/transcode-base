@@ -8,7 +8,7 @@ from pathlib import Path
 from attr import define, frozen
 
 from ..profiles.image import BackendProfile, Profile
-from ..utils import promote, render
+from ..utils import render
 from .base import ShellRunResult, shell
 
 __all__ = [
@@ -19,9 +19,10 @@ __all__ = [
 
 
 @frozen
-class Result(ShellRunResult):
+class Result:
     input: Path
     output: Path
+    shell: ShellRunResult
 
 
 @define
@@ -47,7 +48,7 @@ class Image:
 
     def run(self) -> Result:
         result = shell(self.build_cmd())
-        return promote(result, Result, input=self.input, output=self.output)
+        return Result(input=self.input, output=self.output, shell=result)
 
 
 def _select_backend(profile: Profile, format: str, backend: str) -> BackendProfile:

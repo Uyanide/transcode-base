@@ -68,7 +68,7 @@ class SCD:
         ]
 
     def run(self) -> SCDResult:
-        result = shell(self.build_cmd(), capture=True)
+        result = shell(self.build_cmd(), stdout=True)
         stdout_text = (result.stdout or b"").decode()
         return SCDResult(input=self.input, scene_changes=_parse_scenes(stdout_text))
 
@@ -183,7 +183,7 @@ class Sample:
         if self.profile.workers > 1:
             cmd.extend(["-threads", "2"])
         cmd.append(str(output_path))
-        result = shell(cmd, check=False, capture=True)
+        result = shell(cmd, check=False, stderr=True)
         if result.returncode != 0:
             stderr = (result.stderr or b"").decode()
             msg = f"ffmpeg failed for {output_path} (rc={result.returncode}):\n{stderr}"

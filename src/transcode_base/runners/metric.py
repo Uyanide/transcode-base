@@ -10,7 +10,6 @@ from typing import ClassVar, cast
 
 from attr import define, frozen
 
-from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
@@ -29,9 +28,10 @@ __all__ = [
 
 
 @frozen
-class _MetricResult(ShellRunResult):
+class _MetricResult:
     reference: Path
     distorted: Path
+    shell: ShellRunResult
 
 
 @frozen
@@ -109,7 +109,7 @@ class _FFmpegBaseRunner[Result: _MetricResult]:
         )
 
     def run(self) -> Result:
-        shell_result = shell(self.build_cmd(), capture=True)
+        shell_result = shell(self.build_cmd(), stderr=True)
         if shell_result.stderr is None:
             msg = (
                 f"{self.metric_name} metric did not produce any stderr output for {self.distorted}"
@@ -117,11 +117,10 @@ class _FFmpegBaseRunner[Result: _MetricResult]:
             raise RuntimeError(msg)
         return cast(
             Result,
-            promote(
-                shell_result,
-                self.result_cls,
+            self.result_cls(
                 reference=self.reference,
                 distorted=self.distorted,
+                shell=shell_result,
                 **self.parse(shell_result.stderr.decode()),
             ),
         )
@@ -201,11 +200,10 @@ class VMAF:
         try:
             data = json.loads(self.log_path.read_text())
             pooled = data["pooled_metrics"]["vmaf"]
-            return promote(
-                shell_result,
-                VMAFResult,
+            return VMAFResult(
                 reference=self.reference,
                 distorted=self.distorted,
+                shell=shell_result,
                 json_path=self.log_path,
                 mean=float(pooled["mean"]),
                 harmonic_mean=float(pooled["harmonic_mean"]),
@@ -249,11 +247,10 @@ class _FFVshipRunner:
             msg = f"{self.metric_name} log file not found at {self.log_path}"
             raise RuntimeError(msg)
         rows = _ffvship_load_rows(self.log_path)
-        return promote(
-            shell_result,
-            _FFVshipMetricResult,
+        return _FFVshipMetricResult(
             reference=self.reference,
             distorted=self.distorted,
+            shell=shell_result,
             json_path=self.log_path,
             channels=_aggregate_columns(rows, self.metric_name),
         )

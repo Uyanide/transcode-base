@@ -8,7 +8,6 @@ from email.message import EmailMessage
 from attr import define, frozen
 
 from ..profiles.hooks import MailProfile, NotifyProfile
-from ..utils import promote
 from .base import ShellRunResult, shell
 
 __all__ = [
@@ -50,8 +49,8 @@ class Mail:
 
 
 @frozen
-class NotifyResult(ShellRunResult):
-    pass
+class NotifyResult:
+    shell: ShellRunResult
 
 
 @define
@@ -74,10 +73,11 @@ class Notify:
         ]
 
     def run(self) -> NotifyResult:
+        _dummy = ShellRunResult(returncode=-1, stdout=None, stderr=None, cmd=self.build_cmd())
         try:
             result = shell(self.build_cmd(), check=False)
         except FileNotFoundError:
-            return NotifyResult(returncode=-1, stdout=None, stderr=None, cmd=self.build_cmd())
+            return NotifyResult(shell=_dummy)
         except Exception:
-            return NotifyResult(returncode=-1, stdout=None, stderr=None, cmd=self.build_cmd())
-        return promote(result, NotifyResult)
+            return NotifyResult(shell=_dummy)
+        return NotifyResult(shell=result)

@@ -12,7 +12,7 @@ from ..profiles.av1an import (
     ModeProfile,
     Profile,
 )
-from ..utils import promote, render
+from ..utils import render
 from .base import ShellRunResult, shell
 
 __all__ = [
@@ -29,9 +29,10 @@ class Mode(StrEnum):
 
 
 @frozen
-class Result(ShellRunResult):
+class Result:
     input: Path
     output: Path
+    shell: ShellRunResult
 
 
 @define
@@ -82,12 +83,7 @@ class Av1an:
 
     def run(self) -> Result:
         result = shell(self.build_cmd())
-        return promote(
-            result,
-            Result,
-            input=self.input,
-            output=self.output,
-        )
+        return Result(input=self.input, output=self.output, shell=result)
 
 
 def _select_encoder(profile: Profile, mode: Mode, name: str) -> EncoderProfile:

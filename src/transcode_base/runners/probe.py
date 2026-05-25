@@ -162,7 +162,7 @@ def _build_ffprobe_cmd(
 
 
 def _run_ffprobe(cmd: list[str], input_path: Path):
-    result = shell(cmd, capture=True)
+    result = shell(cmd, stdout=True)
     if result.stdout is None:
         msg = f"ffprobe did not produce any output for {input_path}"
         raise RuntimeError(msg)
