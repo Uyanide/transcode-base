@@ -1,6 +1,6 @@
 # transcode-base
 
-Profiles-based wrappers for video / audio / image encoding and quality measurement.
+Profile-based wrappers for video / audio / image encoding and quality measurement.
 
 ## Library usage
 
@@ -15,10 +15,9 @@ Profiles-based wrappers for video / audio / image encoding and quality measureme
 
 from pathlib import Path
 import transcode_base as tb
-from transcode_base import load_profile
 
 # load defaults and override one encoder key
-profile = load_profile(tb.av1an.Profile, {"tq": {"svt-av1": {"args": {"preset": "6"}}}})
+profile = tb.load_profile(tb.av1an.Profile, {"tq": {"svt-av1": {"args": {"preset": "6"}}}})
 
 result = tb.av1an.Av1an(
     input=Path("input.mkv"),
@@ -36,21 +35,21 @@ By default runners execute commands directly. Use `use_backend` to inject
 alternative behaviour for the duration of a `with` block:
 
 ```python
-from transcode_base import use_backend, current_backend, QuietBackend, TimedBackend, LoggingBackend
+import transcode_base as tb
 
 # suppress terminal output
-with use_backend(QuietBackend()):
+with tb.use_backend(tb.QuietBackend()):
     runner.run()
 
 # measure time per command
-timed = TimedBackend()
-with use_backend(timed):
+timed = tb.TimedBackend()
+with tb.use_backend(timed):
     runner.run()
 for t in timed.timings:
     print(f"{t.elapsed:.3f}s  {t.cmd[0]}")
 
 # log commands (stack on top of the current backend)
-with use_backend(LoggingBackend(inner=current_backend())):
+with tb.use_backend(tb.LoggingBackend(inner=tb.current_backend())):
     runner.run()
 ```
 
