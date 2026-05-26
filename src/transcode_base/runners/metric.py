@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import statistics
 from pathlib import Path
@@ -17,14 +18,38 @@ __all__ = [
     "SSIM",
     "SSIMULACRA2",
     "VMAF",
+    "XPSNR",
     "Butteraugli",
     "ButteraugliResult",
-    "FFVshipChannel",
+    "ChannelStats",
     "PSNRResult",
     "SSIMResult",
     "SSIMULACRA2Result",
     "VMAFResult",
+    "XPSNRResult",
 ]
+
+
+@frozen
+class ChannelStats:
+    """Per-channel aggregates computed from per-frame metric values.
+
+    ``p5``  — worst 5 % for higher-is-better metrics (SSIM, PSNR, VMAF, SSIMULACRA2).
+    ``p95`` — worst 5 % for lower-is-better metrics (Butteraugli).
+    ``harmonic_mean`` — industry standard for VMAF;
+                        for PSNR, frames with infinite PSNR are excluded from the
+                        reciprocal sum so they do not artificially inflate the result;
+                        for Butteraugli, this is computed but not meaningful.
+    """
+
+    mean: float
+    harmonic_mean: float
+    std: float
+    median: float
+    p5: float
+    p95: float
+    min: float
+    max: float
 
 
 @frozen
@@ -35,126 +60,124 @@ class _MetricResult:
 
 
 @frozen
-class VMAFResult(_MetricResult):
-    json_path: Path
-    mean: float
-    harmonic_mean: float
-    min: float
-    max: float
+class _LogMetricResult(_MetricResult):
+    log_path: Path
+    channels: dict[str, ChannelStats]
 
 
 @frozen
-class SSIMResult(_MetricResult):
-    mean: float
-
-
-@frozen
-class PSNRResult(_MetricResult):
-    y: float
-    u: float
-    v: float
-    average: float
-    min: float
-    max: float
-
-
-@frozen
-class FFVshipChannel:
-    name: str
-    mean: float
-    std: float
-    median: float
-    p5: float
-    p95: float
-    min: float
-    max: float
-
-
-@frozen
-class _FFVshipMetricResult(_MetricResult):
-    json_path: Path
-    channels: list[FFVshipChannel]
-
-
-@frozen
-class SSIMULACRA2Result(_FFVshipMetricResult):
+class VMAFResult(_LogMetricResult):
     pass
 
 
 @frozen
-class ButteraugliResult(SSIMULACRA2Result):
+class SSIMResult(_LogMetricResult):
+    pass
+
+
+@frozen
+class PSNRResult(_LogMetricResult):
+    pass
+
+
+@frozen
+class XPSNRResult(_LogMetricResult):
+    pass
+
+
+@frozen
+class SSIMULACRA2Result(_LogMetricResult):
+    pass
+
+
+@frozen
+class ButteraugliResult(_LogMetricResult):
     pass
 
 
 @define
-class _FFmpegBaseRunner[Result: _MetricResult]:
-    metric_name: ClassVar[str]
-    metric_arg: ClassVar[str]
-    result_cls: ClassVar[type[_MetricResult]]
+class _FFmpegStatsRunner[Result: _LogMetricResult]:
+    """Base for ffmpeg metric runners that write a per-frame stats file."""
+
+    filter_name: ClassVar[str]  # "ssim" / "psnr"
+    log_suffix: ClassVar[str]  # ".ssim.txt" / ".psnr.txt"
+    result_cls: ClassVar[type[_LogMetricResult]]
 
     reference: Path
     distorted: Path
+
+    # threads: int | None = None
+    every: int | None = None
+    log_path: Path | None = None
+
     reference_filters: list[str] | None = None
     distorted_filters: list[str] | None = None
 
-    def parse(self, text: str) -> dict[str, float]: ...
+    def _resolved_log_path(self) -> Path:
+        return self.log_path or _build_log_path(self.distorted, self.log_suffix)
 
     def build_cmd(self) -> list[str]:
+        log = self._resolved_log_path()
         return _build_ffmpeg_filter_cmd(
             self.reference,
             self.distorted,
-            distorted_filter=self.distorted_filters,
-            reference_filter=self.reference_filters,
-            metric_filter=self.metric_arg,
+            distorted_filters=self.distorted_filters,
+            reference_filters=self.reference_filters,
+            metric_filter=f"{self.filter_name}=stats_file={_escape_filter_arg(str(log))}",
+            every=self.every,
+            # threads=self.threads,
         )
 
+    def _parse_log(self, path: Path) -> dict[str, list[float]]: ...
+
     def run(self) -> Result:
-        shell_result = shell(self.build_cmd(), stderr=True)
-        if shell_result.stderr is None:
-            msg = (
-                f"{self.metric_name} metric did not produce any stderr output for {self.distorted}"
-            )
+        log = self._resolved_log_path()
+        shell_result = shell(self.build_cmd())
+        if not log.exists():
+            msg = f"{self.filter_name} stats file not found at {log}"
             raise RuntimeError(msg)
+        per_channel = self._parse_log(log)
+        channels = {name: _aggregate(values) for name, values in per_channel.items()}
         return cast(
             Result,
             self.result_cls(
                 reference=self.reference,
                 distorted=self.distorted,
                 shell=shell_result,
-                **self.parse(shell_result.stderr.decode()),
+                log_path=log,
+                channels=channels,
             ),
         )
 
 
 @define
-class SSIM(_FFmpegBaseRunner[SSIMResult]):
-    metric_name = "SSIM"
-    metric_arg = "ssim"
+class SSIM(_FFmpegStatsRunner[SSIMResult]):
+    filter_name = "ssim"
+    log_suffix = ".ssim.txt"
     result_cls = SSIMResult
 
-    def parse(self, text: str) -> dict[str, float]:
-        m = re.search(r"\bAll:(\d+\.\d+)", text)
-        if not m:
-            msg = f"Failed to parse {self.metric_name} result from: {text}"
-            raise RuntimeError(msg)
-        return {"mean": float(m.group(1))}
+    def _parse_log(self, path: Path) -> dict[str, list[float]]:
+        return _parse_ssim_stats(path)
 
 
 @define
-class PSNR(_FFmpegBaseRunner[PSNRResult]):
-    metric_name = "PSNR"
-    metric_arg = "psnr"
+class PSNR(_FFmpegStatsRunner[PSNRResult]):
+    filter_name = "psnr"
+    log_suffix = ".psnr.txt"
     result_cls = PSNRResult
 
-    def parse(self, text: str) -> dict[str, float]:
-        ret = {}
-        for key in ["y", "u", "v", "average", "min", "max"]:
-            m = re.search(rf"\b{key}:(\d+\.\d+)", text)
-            if not m:
-                msg = f"Failed to parse PSNR {key} from: {text}"
-                raise RuntimeError(msg)
-            ret[key] = float(m.group(1))
-        return ret
+    def _parse_log(self, path: Path) -> dict[str, list[float]]:
+        return _parse_psnr_stats(path)
+
+
+@define
+class XPSNR(_FFmpegStatsRunner[XPSNRResult]):
+    filter_name = "xpsnr"
+    log_suffix = ".xpsnr.txt"
+    result_cls = XPSNRResult
+
+    def _parse_log(self, path: Path) -> dict[str, list[float]]:
+        return _parse_xpsnr_stats(path)
 
 
 @define
@@ -164,16 +187,18 @@ class VMAF:
 
     threads: int | None = None
     subsample: int | None = None
-    model: str | None = None  # VMAF model version, e.g. "vmaf_v0.6.1"
+    model: str | None = None  # VMAF model version
     log_path: Path | None = None
+
     reference_filters: list[str] | None = None
     distorted_filters: list[str] | None = None
 
-    def build_cmd(self) -> list[str]:
-        if self.log_path is None:
-            self.log_path = _build_log_path(self.distorted, ".vmaf.json")
+    def _resolved_log_path(self) -> Path:
+        return self.log_path or _build_log_path(self.distorted, ".vmaf.json")
 
-        opts = [f"log_path={self.log_path}", "log_fmt=json"]
+    def build_cmd(self) -> list[str]:
+        log = self._resolved_log_path()
+        opts = [f"log_path={_escape_filter_arg(str(log))}", "log_fmt=json"]
         if self.threads is not None:
             opts.append(f"n_threads={self.threads}")
         if self.subsample is not None:
@@ -184,112 +209,143 @@ class VMAF:
         return _build_ffmpeg_filter_cmd(
             self.reference,
             self.distorted,
-            distorted_filter=self.distorted_filters,
-            reference_filter=self.reference_filters,
+            distorted_filters=self.distorted_filters,
+            reference_filters=self.reference_filters,
             metric_filter=libvmaf,
+            every=None,  # handled in metric_filter
+            # threads=None,  # handled in metric_filter
         )
 
     def run(self) -> VMAFResult:
+        log = self._resolved_log_path()
         shell_result = shell(self.build_cmd())
-        if self.log_path is None:
-            msg = "log_path must be set to parse VMAF result"
-            raise RuntimeError(msg)
-        if not self.log_path.exists():
-            msg = f"VMAF log file not found at {self.log_path}"
+        if not log.exists():
+            msg = f"VMAF log file not found at {log}"
             raise RuntimeError(msg)
         try:
-            data = json.loads(self.log_path.read_text())
-            pooled = data["pooled_metrics"]["vmaf"]
+            data = json.loads(log.read_text())
+            frames = [float(f["metrics"]["vmaf"]) for f in data["frames"]]
             return VMAFResult(
                 reference=self.reference,
                 distorted=self.distorted,
                 shell=shell_result,
-                json_path=self.log_path,
-                mean=float(pooled["mean"]),
-                harmonic_mean=float(pooled["harmonic_mean"]),
-                min=float(pooled["min"]),
-                max=float(pooled["max"]),
+                log_path=log,
+                channels={"vmaf": _aggregate(frames)},
             )
         except (KeyError, TypeError, ValueError) as e:
-            msg = f"unexpected libvmaf JSON shape at {self.log_path}: {e}"
+            msg = f"unexpected libvmaf JSON shape at {log}: {e}"
             raise RuntimeError(msg) from e
 
 
 @define
-class _FFVshipRunner:
+class _FFVshipRunner[Result: _LogMetricResult]:
     metric_arg: ClassVar[str]
     metric_name: ClassVar[str]
+    result_cls: ClassVar[type[_LogMetricResult]]
 
     reference: Path
     distorted: Path
+
     threads: int | None = None
     every: int | None = None
     log_path: Path | None = None
 
+    def _resolved_log_path(self) -> Path:
+        return self.log_path or _build_log_path(self.distorted, f".{self.metric_name.lower()}.json")
+
+    def _column_names(self, width: int) -> list[str]:
+        """Return channel names for *width* FFVship columns.
+
+        Override in subclasses that have fixed, named columns (e.g. Butteraugli).
+        """
+        if width == 1:
+            return [self.metric_name]
+        return [f"{self.metric_name}[{i}]" for i in range(width)]
+
     def build_cmd(self) -> list[str]:
-        if self.log_path is None:
-            self.log_path = _build_log_path(self.distorted, f".{self.metric_name}.json")
+        log = self._resolved_log_path()
         return _build_ffvship_cmd(
             self.reference,
             self.distorted,
             self.metric_arg,
             self.threads,
             self.every,
-            self.log_path,
+            log,
         )
 
-    def run(self) -> _FFVshipMetricResult:
+    def run(self) -> Result:
+        log = self._resolved_log_path()
         shell_result = shell(self.build_cmd())
-        if self.log_path is None:
-            msg = f"log_path must be set to parse {self.metric_name} result"
+        if not log.exists():
+            msg = f"{self.metric_name} log file not found at {log}"
             raise RuntimeError(msg)
-        if not self.log_path.exists():
-            msg = f"{self.metric_name} log file not found at {self.log_path}"
-            raise RuntimeError(msg)
-        rows = _ffvship_load_rows(self.log_path)
-        return _FFVshipMetricResult(
-            reference=self.reference,
-            distorted=self.distorted,
-            shell=shell_result,
-            json_path=self.log_path,
-            channels=_aggregate_columns(rows, self.metric_name),
+        rows = _ffvship_load_rows(log)
+        width = len(rows[0])
+        names = self._column_names(width)
+        channels = {name: _aggregate([row[i] for row in rows]) for i, name in enumerate(names)}
+        return cast(
+            Result,
+            self.result_cls(
+                reference=self.reference,
+                distorted=self.distorted,
+                shell=shell_result,
+                log_path=log,
+                channels=channels,
+            ),
         )
 
 
 @define
-class SSIMULACRA2(_FFVshipRunner):
+class SSIMULACRA2(_FFVshipRunner[SSIMULACRA2Result]):
     metric_arg = "ssimulacra2"
     metric_name = "SSIMULACRA2"
+    result_cls = SSIMULACRA2Result
 
 
 @define
-class Butteraugli(_FFVshipRunner):
+class Butteraugli(_FFVshipRunner[ButteraugliResult]):
     metric_arg = "butteraugli"
     metric_name = "Butteraugli"
+    result_cls = ButteraugliResult
+
+    def _column_names(self, width: int) -> list[str]:
+        if width == 3:
+            return ["2-Norm", "3-Norm", "INF-Norm"]
+        return super()._column_names(width)
+
+
+def _escape_filter_arg(s: str) -> str:
+    return s.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
 
 def _build_ffmpeg_filter_cmd(
     reference: Path,
     distorted: Path,
-    distorted_filter: list[str] | None = None,
-    reference_filter: list[str] | None = None,
-    metric_filter: str = "",
+    metric_filter: str,
+    *,
+    distorted_filters: list[str] | None = None,
+    reference_filters: list[str] | None = None,
+    every: int | None = None,
+    # threads: int | None = None,
 ) -> list[str]:
+    distorted_filters = [
+        f
+        for f in (distorted_filters or [])
+        if not (f.startswith("settb=") or f.startswith("setpts="))
+    ]
+    reference_filters = [
+        f
+        for f in (reference_filters or [])
+        if not (f.startswith("settb=") or f.startswith("setpts="))
+    ]
+    if every is not None and every > 1:
+        distorted_filters.append(f"framestep={every}")
+        reference_filters.append(f"framestep={every}")
+    distorted_filters.extend(["settb=AVTB", "setpts=PTS-STARTPTS"])
+    reference_filters.extend(["settb=AVTB", "setpts=PTS-STARTPTS"])
     filtergraph = ""
-    distorted_filter = [
-        f
-        for f in (distorted_filter or [])
-        if not (f.startswith("settb=") or f.startswith("setpts="))
-    ]
-    reference_filter = [
-        f
-        for f in (reference_filter or [])
-        if not (f.startswith("settb=") or f.startswith("setpts="))
-    ]
-    distorted_filter.extend(["settb=AVTB", "setpts=PTS-STARTPTS"])
-    reference_filter.extend(["settb=AVTB", "setpts=PTS-STARTPTS"])
-    filtergraph += f"[0:v]{','.join(distorted_filter)}[d];"
-    filtergraph += f"[1:v]{','.join(reference_filter)}[r];"
+    filtergraph += f"[0:v]{','.join(distorted_filters)}[d];"
+    filtergraph += f"[1:v]{','.join(reference_filters)}[r];"
     filtergraph += f"[d][r]{metric_filter}"
     cmd = [
         "ffmpeg",
@@ -298,12 +354,14 @@ def _build_ffmpeg_filter_cmd(
         str(distorted),
         "-i",
         str(reference),
+        "-an",
+        "-sn",
         "-filter_complex",
         filtergraph,
-        "-f",
-        "null",
-        "-",
     ]
+    # if threads is not None:
+    #     cmd.extend(["-filter_threads", str(threads)])
+    cmd.extend(["-f", "null", "-"])
     return cmd
 
 
@@ -333,6 +391,87 @@ def _build_ffvship_cmd(
     return cmd
 
 
+def _build_log_path(base: Path, suffix: str) -> Path:
+    return base.with_suffix(suffix)
+
+
+def _parse_ssim_stats(path: Path) -> dict[str, list[float]]:
+    """Parse an ffmpeg ssim stats file into per-channel per-frame value lists.
+
+    Line format::
+
+        n:1 Y:0.999999 U:0.999992 V:0.999994 All:0.999997 (55.23)
+
+    Returns keys: ``Y``, ``U``, ``V``, ``All``.
+    """
+    result: dict[str, list[float]] = {}
+    with path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for m in re.finditer(r"\b(Y|U|V|All):([\d.]+)", line):
+                result.setdefault(m.group(1), []).append(float(m.group(2)))
+    if not result:
+        msg = f"SSIM stats file at {path} contains no data"
+        raise RuntimeError(msg)
+    return result
+
+
+_PSNR_KEY_MAP = {"psnr_y": "Y", "psnr_u": "U", "psnr_v": "V", "psnr_avg": "All"}
+
+
+def _parse_psnr_stats(path: Path) -> dict[str, list[float]]:
+    """Parse an ffmpeg psnr stats file into per-channel per-frame value lists.
+
+    Line format::
+
+        n:1 mse_avg:0.018 mse_y:0.024 mse_u:0.018 mse_v:0.014
+            psnr_avg:65.52 psnr_y:64.25 psnr_u:65.51 psnr_v:66.69
+
+    Returns keys: ``Y``, ``U``, ``V``, ``All``.
+    Handles ``inf`` values (frames identical to reference have infinite PSNR).
+    """
+    result: dict[str, list[float]] = {}
+    with path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for ffmpeg_key, channel in _PSNR_KEY_MAP.items():
+                m = re.search(rf"\b{ffmpeg_key}:(inf|\d+(?:\.\d+)?)", line)
+                if m:
+                    result.setdefault(channel, []).append(float(m.group(1)))
+    if not result:
+        msg = f"PSNR stats file at {path} contains no data"
+        raise RuntimeError(msg)
+    return result
+
+
+def _parse_xpsnr_stats(path: Path) -> dict[str, list[float]]:
+    """Parse an ffmpeg xpsnr stats file into per-channel per-frame value lists.
+
+    Line format::
+
+        n:    1  XPSNR y: 48.6592  XPSNR u: 54.6191  XPSNR v: 54.7136
+
+    Returns keys: ``Y``, ``U``, ``V``.
+    """
+    result: dict[str, list[float]] = {}
+    with path.open() as fh:
+        for line in fh:
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            for m in re.finditer(r"\bXPSNR\s+([yuv]):\s*(\d+(?:\.\d+)?)", line):
+                channel = m.group(1).upper()
+                result.setdefault(channel, []).append(float(m.group(2)))
+    if not result:
+        msg = f"XPSNR stats file at {path} contains no data"
+        raise RuntimeError(msg)
+    return result
+
+
 def _ffvship_load_rows(json_path: Path) -> list[list[float]]:
     """FFVship's JSON is a list of per-frame rows, each a list of floats.
     SSIMULACRA2 produces 1 column; Butteraugli produces 3 (2-Norm, 3-Norm, INF-Norm)."""
@@ -359,27 +498,11 @@ def _ffvship_load_rows(json_path: Path) -> list[list[float]]:
     return rows
 
 
-def _aggregate_columns(rows: list[list[float]], metric: str) -> list[FFVshipChannel]:
-    width = len(rows[0])
-    names = _channel_names(metric, width)
-    return [_aggregate_column(name, [r[i] for r in rows]) for i, name in enumerate(names)]
-
-
-def _channel_names(metric: str, width: int) -> list[str]:
-    """Match FFVship's stdout section labels where we can; fall back to indexed names."""
-    if metric == "Butteraugli" and width == 3:
-        return ["Butteraugli 2-Norm", "Butteraugli 3-Norm", "Butteraugli INF-Norm"]
-    if width == 1:
-        return [metric]
-    return [f"{metric}[{i}]" for i in range(width)]
-
-
-def _aggregate_column(name: str, values: list[float]) -> FFVshipChannel:
-    """Compute the seven aggregates FFVship's stdout shows. Linear interpolation
-    for percentiles (matches numpy's default, well-defined for any n >= 1)."""
+def _aggregate(values: list[float]) -> ChannelStats:
+    """Aggregate per-frame values into a :class:`ChannelStats`."""
     n = len(values)
     if n == 0:
-        msg = f"FFVship channel {name!r}: empty value list"
+        msg = "cannot aggregate an empty value list"
         raise RuntimeError(msg)
     ordered = sorted(values)
 
@@ -392,9 +515,15 @@ def _aggregate_column(name: str, values: list[float]) -> FFVshipChannel:
         frac = rank - lo
         return ordered[lo] * (1 - frac) + ordered[hi] * frac
 
-    return FFVshipChannel(
-        name=name,
-        mean=sum(values) / n,
+    # Harmonic mean over finite positive values only.
+    # ∞-PSNR frames (identical to reference) are excluded so they do not
+    # interfere with the reciprocal sum; VMAF/SSIM values are always finite.
+    finite_pos = [v for v in values if math.isfinite(v) and v > 0]
+    harmonic_mean = statistics.harmonic_mean(finite_pos) if finite_pos else 0.0
+
+    return ChannelStats(
+        mean=statistics.mean(values),
+        harmonic_mean=harmonic_mean,
         std=statistics.stdev(values) if n >= 2 else 0.0,
         median=statistics.median(values),
         p5=pct(5),
@@ -402,7 +531,3 @@ def _aggregate_column(name: str, values: list[float]) -> FFVshipChannel:
         min=ordered[0],
         max=ordered[-1],
     )
-
-
-def _build_log_path(base: Path, suffix: str) -> Path:
-    return base.with_suffix(suffix)
