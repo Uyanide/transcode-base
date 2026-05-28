@@ -7,7 +7,7 @@ import json
 from enum import StrEnum
 from pathlib import Path
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from .base import ShellRunResult, shell
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from ..profiles.image import BackendProfile, Profile
 from ..utils import render

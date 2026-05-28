@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from enum import StrEnum
 from pathlib import Path
 
-from attr import define, field, frozen
+from attrs import define, field, frozen
 
 from ..profiles.sample import SampleProfile, SCDProfile
 from . import probe

@@ -7,9 +7,9 @@ import math
 import re
 import statistics
 from pathlib import Path
-from typing import ClassVar, cast
+from typing import ClassVar, Protocol, cast
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from .base import ShellRunResult, shell
 
@@ -19,9 +19,11 @@ __all__ = [
     "SSIMULACRA2",
     "VMAF",
     "XPSNR",
+    "METRICS",
     "Butteraugli",
     "ButteraugliResult",
     "ChannelStats",
+    "MetricRunner",
     "PSNRResult",
     "SSIMResult",
     "SSIMULACRA2Result",
@@ -32,16 +34,6 @@ __all__ = [
 
 @frozen
 class ChannelStats:
-    """Per-channel aggregates computed from per-frame metric values.
-
-    ``p5``  — worst 5 % for higher-is-better metrics (SSIM, PSNR, VMAF, SSIMULACRA2).
-    ``p95`` — worst 5 % for lower-is-better metrics (Butteraugli).
-    ``harmonic_mean`` — industry standard for VMAF;
-                        for PSNR, frames with infinite PSNR are excluded from the
-                        reciprocal sum so they do not artificially inflate the result;
-                        for Butteraugli, this is computed but not meaningful.
-    """
-
     mean: float
     harmonic_mean: float
     std: float
@@ -63,6 +55,31 @@ class _MetricResult:
 class _LogMetricResult(_MetricResult):
     log_path: Path
     channels: dict[str, ChannelStats]
+
+    def _stat_items(self, ch: ChannelStats) -> list[tuple[str, float]]:
+        """Aggregates that are meaningful for this metric, as (label, value) pairs.
+
+        ``p5``  — worst 5 % for higher-is-better metrics (SSIM, PSNR, VMAF, SSIMULACRA2).
+        ``p95`` — worst 5 % for lower-is-better metrics (Butteraugli).
+        ``harmonic_mean`` — industry standard for VMAF;
+                            for PSNR, frames with infinite PSNR are excluded from the
+                            reciprocal sum so they do not artificially inflate the result;
+                            for Butteraugli, this is computed but not meaningful.
+        """
+        return [
+            ("mean", ch.mean),
+            ("hmean", ch.harmonic_mean),
+            ("std", ch.std),
+            ("median", ch.median),
+            ("p5", ch.p5),
+            ("min", ch.min),
+            ("max", ch.max),
+        ]
+
+    def print_channels(self) -> None:
+        for name, ch in self.channels.items():
+            body = "  ".join(f"{label}={value:.4f}" for label, value in self._stat_items(ch))
+            print(f"{name}:  {body}")
 
 
 @frozen
@@ -92,21 +109,31 @@ class SSIMULACRA2Result(_LogMetricResult):
 
 @frozen
 class ButteraugliResult(_LogMetricResult):
-    pass
+    def _stat_items(self, ch: ChannelStats) -> list[tuple[str, float]]:
+        # lower-is-better: worst 5 % is the high tail (p95); harmonic mean not meaningful
+        return [
+            ("mean", ch.mean),
+            ("std", ch.std),
+            ("median", ch.median),
+            ("p95", ch.p95),
+            ("min", ch.min),
+            ("max", ch.max),
+        ]
 
 
 @define
 class _FFmpegStatsRunner[Result: _LogMetricResult]:
     """Base for ffmpeg metric runners that write a per-frame stats file."""
 
-    filter_name: ClassVar[str]  # "ssim" / "psnr"
-    log_suffix: ClassVar[str]  # ".ssim.txt" / ".psnr.txt"
+    filter_name: ClassVar[str]  # "ssim" / "psnr" / "xpsnr"
+    log_suffix: ClassVar[str]  # ".ssim.txt" / ".psnr.txt" / ".xpsnr.txt"
+    output_suffix: ClassVar[str] = ".txt"
     result_cls: ClassVar[type[_LogMetricResult]]
 
     reference: Path
     distorted: Path
 
-    # threads: int | None = None
+    threads: int | None = None
     every: int | None = None
     log_path: Path | None = None
 
@@ -125,7 +152,7 @@ class _FFmpegStatsRunner[Result: _LogMetricResult]:
             reference_filters=self.reference_filters,
             metric_filter=f"{self.filter_name}=stats_file={_escape_filter_arg(str(log))}",
             every=self.every,
-            # threads=self.threads,
+            threads=self.threads,
         )
 
     def _parse_log(self, path: Path) -> dict[str, list[float]]: ...
@@ -182,11 +209,13 @@ class XPSNR(_FFmpegStatsRunner[XPSNRResult]):
 
 @define
 class VMAF:
+    output_suffix: ClassVar[str] = ".json"
+
     reference: Path
     distorted: Path
 
     threads: int | None = None
-    subsample: int | None = None
+    every: int | None = None
     model: str | None = None  # VMAF model version
     log_path: Path | None = None
 
@@ -201,8 +230,8 @@ class VMAF:
         opts = [f"log_path={_escape_filter_arg(str(log))}", "log_fmt=json"]
         if self.threads is not None:
             opts.append(f"n_threads={self.threads}")
-        if self.subsample is not None:
-            opts.append(f"n_subsample={self.subsample}")
+        if self.every is not None:
+            opts.append(f"n_subsample={self.every}")
         if self.model is not None:
             opts.append(f"model=version={self.model}")
         libvmaf = "libvmaf=" + ":".join(opts)
@@ -241,6 +270,7 @@ class VMAF:
 class _FFVshipRunner[Result: _LogMetricResult]:
     metric_arg: ClassVar[str]
     metric_name: ClassVar[str]
+    output_suffix: ClassVar[str] = ".json"
     result_cls: ClassVar[type[_LogMetricResult]]
 
     reference: Path
@@ -314,6 +344,36 @@ class Butteraugli(_FFVshipRunner[ButteraugliResult]):
         return super()._column_names(width)
 
 
+class MetricRunner(Protocol):
+    """The common surface every metric runner exposes"""
+
+    output_suffix: ClassVar[str]
+
+    def __init__(
+        self,
+        *,
+        reference: Path,
+        distorted: Path,
+        threads: int | None = ...,
+        every: int | None = ...,
+        log_path: Path | None = ...,
+    ) -> None: ...
+
+    def build_cmd(self) -> list[str]: ...
+
+    def run(self) -> _LogMetricResult: ...
+
+
+METRICS: dict[str, type[MetricRunner]] = {
+    "ssim": SSIM,
+    "psnr": PSNR,
+    "xpsnr": XPSNR,
+    "vmaf": VMAF,
+    "ssimulacra2": SSIMULACRA2,
+    "butteraugli": Butteraugli,
+}
+
+
 def _escape_filter_arg(s: str) -> str:
     return s.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'")
 
@@ -326,7 +386,7 @@ def _build_ffmpeg_filter_cmd(
     distorted_filters: list[str] | None = None,
     reference_filters: list[str] | None = None,
     every: int | None = None,
-    # threads: int | None = None,
+    threads: int | None = None,
 ) -> list[str]:
     distorted_filters = [
         f
@@ -359,8 +419,10 @@ def _build_ffmpeg_filter_cmd(
         "-filter_complex",
         filtergraph,
     ]
-    # if threads is not None:
-    #     cmd.extend(["-filter_threads", str(threads)])
+    # -filter_threads parallelises slice-threaded filters; its benefit for ssim/psnr
+    # is marginal (libvmaf has its own n_threads), but it keeps the surface uniform.
+    if threads is not None:
+        cmd.extend(["-filter_threads", str(threads)])
     cmd.extend(["-f", "null", "-"])
     return cmd
 

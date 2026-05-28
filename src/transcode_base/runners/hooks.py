@@ -5,7 +5,7 @@ from __future__ import annotations
 import smtplib
 from email.message import EmailMessage
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from ..profiles.hooks import MailProfile, NotifyProfile
 from .base import ShellRunResult, shell

@@ -3,17 +3,16 @@ from __future__ import annotations
 import argparse
 import shlex
 from pathlib import Path
-from typing import cast
 
 from ..profiles import ffmpeg as _prof
 from ..profiles.base import RawProfile, load_profile
 from ..runners.ffmpeg import FFmpeg
-from ._utils import kv_type
+from ._utils import existing_file, kv_type
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Encode a video with ffmpeg.")
-    p.add_argument("input", type=Path)
+    p.add_argument("input", type=existing_file)
     p.add_argument("-o", "--output", type=Path)
     p.add_argument("--video", default="libsvtav1", metavar="ENCODER")
     p.add_argument("--audio", default="copy", metavar="ENCODER")
@@ -37,13 +36,13 @@ def main() -> None:
         f"{ns.input.stem}.{video or 'novideo'}.{audio or 'noaudio'}.mkv"
     )
 
-    raw: dict[str, dict[str, dict[str, str]]] = {}
+    raw: RawProfile = {}
     if ns.arg and video:
-        raw["video"] = {video: dict(ns.arg)}
+        raw["video"] = {video: {k: v for k, v in ns.arg}}
     if ns.audio_arg and audio:
-        raw["audio"] = {audio: dict(ns.audio_arg)}
+        raw["audio"] = {audio: {k: v for k, v in ns.audio_arg}}
 
-    profile = load_profile(_prof.Profile, cast(RawProfile, raw))
+    profile = load_profile(_prof.Profile, raw)
     runner = FFmpeg(
         input=ns.input,
         output=output,

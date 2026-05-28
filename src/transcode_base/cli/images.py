@@ -5,12 +5,11 @@ import shlex
 import sys
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import cast
 
 from ..profiles import image as _prof
 from ..profiles.base import RawProfile, load_profile
 from ..runners.image import Image
-from ._utils import kv_type
+from ._utils import existing_dir, kv_type, positive_int
 
 
 def _needs_update(src: Path, dst: Path) -> bool:
@@ -19,7 +18,7 @@ def _needs_update(src: Path, dst: Path) -> bool:
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Batch-encode images (incremental).")
-    p.add_argument("input_dir", type=Path)
+    p.add_argument("input_dir", type=existing_dir)
     p.add_argument("output_dir", type=Path)
     p.add_argument("--format", required=True, metavar="FORMAT")
     p.add_argument("--backend", required=True, metavar="BACKEND")
@@ -29,7 +28,7 @@ def main() -> None:
         help="output extension, e.g. .avif (default: .<format>)",
     )
     p.add_argument("--glob", default="*", metavar="PATTERN")
-    p.add_argument("--workers", type=int, default=4)
+    p.add_argument("--workers", type=positive_int, default=4)
     p.add_argument("--arg", metavar="KEY=VALUE", action="append", default=[], type=kv_type)
     p.add_argument("--dry-run", action="store_true")
     ns = p.parse_args()
@@ -44,8 +43,10 @@ def main() -> None:
 
     ns.output_dir.mkdir(parents=True, exist_ok=True)
 
-    raw = {ns.format: {ns.backend: {"args": dict(ns.arg)}}} if ns.arg else {}
-    profile = load_profile(_prof.Profile, cast(RawProfile, raw))
+    raw: RawProfile = (
+        {ns.format: {ns.backend: {"args": {k: v for k, v in ns.arg}}}} if ns.arg else {}
+    )
+    profile = load_profile(_prof.Profile, raw)
 
     work: list[tuple[Path, Path]] = []
     for src in inputs:

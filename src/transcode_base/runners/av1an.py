@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import StrEnum
 from pathlib import Path
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from ..profiles.av1an import (
     EncoderProfile,

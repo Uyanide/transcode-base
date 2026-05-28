@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from ..profiles.doublepass import EncoderProfile, Profile
 from .base import ShellRunResult, shell

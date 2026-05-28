@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from attr import define, frozen
+from attrs import define, frozen
 
 from ..profiles.ffmpeg import EncoderProfile, Profile
 from .base import ShellRunResult, shell
@@ -55,7 +55,9 @@ class FFmpeg:
 
     def run(self) -> Result:
         result = shell(self.build_cmd())
-        return Result(input=self.input, output=self.output, filters=self.profile.filters, shell=result)
+        return Result(
+            input=self.input, output=self.output, filters=self.profile.filters, shell=result
+        )
 
 
 def _lookup(table: dict[str, EncoderProfile], name: str, kind: str) -> EncoderProfile:
