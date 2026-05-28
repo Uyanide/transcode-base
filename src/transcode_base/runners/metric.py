@@ -18,6 +18,7 @@ __all__ = [
     "SSIM",
     "SSIMULACRA2",
     "VMAF",
+    "VMAFCUDA",
     "XPSNR",
     "METRICS",
     "Butteraugli",
@@ -222,6 +223,15 @@ class VMAF:
     reference_filters: list[str] | None = None
     distorted_filters: list[str] | None = None
 
+    use_cuda: bool = False
+
+    def __attrs_post_init__(self) -> None:
+        if not self.use_cuda:
+            return
+
+        self.reference_filters = (self.reference_filters or []) + ["scale_cuda=format=yuv420p"]
+        self.distorted_filters = (self.distorted_filters or []) + ["scale_cuda=format=yuv420p"]
+
     def _resolved_log_path(self) -> Path:
         return self.log_path or _build_log_path(self.distorted, ".vmaf.json")
 
@@ -229,12 +239,17 @@ class VMAF:
         log = self._resolved_log_path()
         opts = [f"log_path={_escape_filter_arg(str(log))}", "log_fmt=json"]
         if self.threads is not None:
+            # This is expected to fail on libvmaf_cuda. but who knows, maybe it
+            # will be supported in the future?
             opts.append(f"n_threads={self.threads}")
         if self.every is not None:
             opts.append(f"n_subsample={self.every}")
         if self.model is not None:
             opts.append(f"model=version={self.model}")
-        libvmaf = "libvmaf=" + ":".join(opts)
+        if self.use_cuda:
+            libvmaf = "libvmaf_cuda=" + ":".join(opts)
+        else:
+            libvmaf = "libvmaf=" + ":".join(opts)
         return _build_ffmpeg_filter_cmd(
             self.reference,
             self.distorted,
@@ -242,6 +257,7 @@ class VMAF:
             reference_filters=self.reference_filters,
             metric_filter=libvmaf,
             every=None,  # handled in metric_filter
+            cuda_input=self.use_cuda,
             # threads=None,  # handled in metric_filter
         )
 
@@ -264,6 +280,11 @@ class VMAF:
         except (KeyError, TypeError, ValueError) as e:
             msg = f"unexpected libvmaf JSON shape at {log}: {e}"
             raise RuntimeError(msg) from e
+
+
+@define
+class VMAFCUDA(VMAF):
+    use_cuda: bool = True
 
 
 @define
@@ -354,9 +375,9 @@ class MetricRunner(Protocol):
         *,
         reference: Path,
         distorted: Path,
-        threads: int | None = ...,
-        every: int | None = ...,
-        log_path: Path | None = ...,
+        threads: int | None = None,
+        every: int | None = None,
+        log_path: Path | None = None,
     ) -> None: ...
 
     def build_cmd(self) -> list[str]: ...
@@ -369,6 +390,7 @@ METRICS: dict[str, type[MetricRunner]] = {
     "psnr": PSNR,
     "xpsnr": XPSNR,
     "vmaf": VMAF,
+    "vmafcuda": VMAFCUDA,
     "ssimulacra2": SSIMULACRA2,
     "butteraugli": Butteraugli,
 }
@@ -387,6 +409,7 @@ def _build_ffmpeg_filter_cmd(
     reference_filters: list[str] | None = None,
     every: int | None = None,
     threads: int | None = None,
+    cuda_input: bool = False,
 ) -> list[str]:
     distorted_filters = [
         f
@@ -410,15 +433,43 @@ def _build_ffmpeg_filter_cmd(
     cmd = [
         "ffmpeg",
         "-hide_banner",
-        "-i",
-        str(distorted),
-        "-i",
-        str(reference),
-        "-an",
-        "-sn",
-        "-filter_complex",
-        filtergraph,
     ]
+
+    if cuda_input:
+        cmd.extend(
+            [
+                "-hwaccel",
+                "cuda",
+                "-hwaccel_output_format",
+                "cuda",
+                "-i",
+                str(distorted),
+                "-hwaccel",
+                "cuda",
+                "-hwaccel_output_format",
+                "cuda",
+                "-i",
+                str(reference),
+            ]
+        )
+    else:
+        cmd.extend(
+            [
+                "-i",
+                str(distorted),
+                "-i",
+                str(reference),
+            ]
+        )
+
+    cmd.extend(
+        [
+            "-an",
+            "-sn",
+            "-filter_complex",
+            filtergraph,
+        ]
+    )
     # -filter_threads parallelises slice-threaded filters; its benefit for ssim/psnr
     # is marginal (libvmaf has its own n_threads), but it keeps the surface uniform.
     if threads is not None:
