@@ -251,10 +251,10 @@ class VMAF:
         else:
             libvmaf = "libvmaf=" + ":".join(opts)
         return _build_ffmpeg_filter_cmd(
-            self.reference,
-            self.distorted,
-            distorted_filters=self.distorted_filters,
-            reference_filters=self.reference_filters,
+            self.distorted,  # libvmaf expects distorted first, then reference
+            self.reference,  # while the others (xpsnr) expect the opposite
+            distorted_filters=self.reference_filters,
+            reference_filters=self.distorted_filters,
             metric_filter=libvmaf,
             every=None,  # handled in metric_filter
             cuda_input=self.use_cuda,
@@ -429,7 +429,7 @@ def _build_ffmpeg_filter_cmd(
     filtergraph = ""
     filtergraph += f"[0:v]{','.join(distorted_filters)}[d];"
     filtergraph += f"[1:v]{','.join(reference_filters)}[r];"
-    filtergraph += f"[d][r]{metric_filter}"
+    filtergraph += f"[r][d]{metric_filter}"
     cmd = [
         "ffmpeg",
         "-hide_banner",
